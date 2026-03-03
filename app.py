@@ -64,7 +64,7 @@ def search_place_candidates(query):
 
     params = {
         "query": query,
-        "display": 5,
+        "display": 10,
         "sort": "random"
     }
 
@@ -231,7 +231,7 @@ LOCAL_SEARCH_URL = "https://openapi.naver.com/v1/search/local.json"
 # 📌 주소 → 좌표
 # ==============================
 
-@st.cache_data
+@st.cache_data(ttl=1800)
 def geocode(address):
     params = {"query": address}
     res = requests.get(GEOCODE_URL, headers=HEADERS, params=params)
@@ -281,8 +281,6 @@ with tab1:
     all_names = [row[0] for row in get_all_addresses()]
     name_options = ["선택하세요"] + ["네이버검색🔍"] + all_names
 
-    origins = {}
-    destinations = {}
 #================= UI입력창 시작 =================
     st.header("📍 출발지 (최대 4곳)")
 
@@ -325,7 +323,6 @@ with tab1:
 
                 for origin_name, origin_addr in origins.items():
                     start_coord = geocode(origin_addr)
-                    time.sleep(0.2)
 
                     if not start_coord:
                         continue

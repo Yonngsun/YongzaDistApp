@@ -105,19 +105,26 @@ def render_location_section(section_type, label_prefix, count, name_options):
 
     for i in range(1, count + 1):
 
-        st.markdown(f"---")
-        st.subheader(f"{label_prefix}{i}")
+        base_key = f"{section_type}_{i}"
 
-        col1, col2 = st.columns(2)
+        if i > 1:
+            st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
+
+        #st.markdown(
+        #    f"<div style='font-size:18px; font-weight:600; margin-bottom:5px;'>{label_prefix}{i}</div>",
+        #    unsafe_allow_html=True
+        #)
+
+        col1, col2 = st.columns([3, 7])
 
         # ==========================
-        # 🔹 1️⃣ 선택박스 (왼쪽)
+        # 🔹 왼쪽: 장소 선택
         # ==========================
         with col1:
             selected = st.selectbox(
-                "장소 선택",
+                f"{label_prefix}{i} 선택",
                 name_options,
-                key=f"{section_type}_select_box_{i}"
+                key=f"{base_key}_select"
             )
 
         if selected == "선택하세요":
@@ -126,79 +133,82 @@ def render_location_section(section_type, label_prefix, count, name_options):
         is_direct = selected == "네이버검색🔍"
 
         # ==========================
-        # 🔹 2️⃣ 직접 입력 UI (왼쪽 중심)
+        # 🔹 오른쪽 영역
         # ==========================
-        if is_direct:
+        with col2:
 
-            with col1:
+            # 🔥 1️⃣ 네이버 검색 모드
+            if is_direct:
+
                 name = st.text_input(
-                    "이름 입력",
-                    key=f"{section_type}_name_input_{i}"
+                    "검색어 입력",
+                    key=f"{base_key}_name"
                 )
 
-            selected_address = None
+                addr = None
 
-            if name and len(name) >= 2:
+                if name and len(name) >= 2:
 
-                candidates = search_place_candidates(name)
+                    candidates = search_place_candidates(name)
 
-                if candidates:
-                    option_labels = [
-                        f"{item['title']} | {item['address']}"
-                        for item in candidates
-                    ]
+                    if candidates:
 
-                    with col2:
-                        selected_label = st.selectbox(
-                            "검색 결과 선택",
-                            option_labels,
-                            key=f"{section_type}_candidate_select_{i}"
+                        option_labels = [
+                            f"{item['title']} | {item['address']}"
+                            for item in candidates
+                        ]
+
+                        sel_col, btn_col = st.columns(
+                            [7, 1],
+                            vertical_alignment="bottom"
                         )
 
-                    selected_index = option_labels.index(selected_label)
-                    selected_item = candidates[selected_index]
-                    selected_address = selected_item["address"]
+                        with sel_col:
+                            selected_label = st.selectbox(
+                                "검색 결과 선택",
+                                option_labels,
+                                key=f"{base_key}_candidate"
+                            )
 
-                else:
-                    with col2:
+                        selected_index = option_labels.index(selected_label)
+                        selected_item = candidates[selected_index]
+                        addr = selected_item["address"]
+
+                        with btn_col:
+                            save_clicked = st.button(
+                                "💾",
+                                key=f"{base_key}_save",
+                                use_container_width=True
+                            )
+
+                        if save_clicked:
+                            save_address(name, addr)
+                            st.toast("💾 저장 완료!", icon="✅")
+                            #st.write("✅")
+
+                    else:
                         st.warning("검색 결과가 없습니다.")
 
-            # ✅ 저장 버튼은 한 번만 생성
-            with col2:
-                save_clicked = st.button(
-                    "저장",
-                    key=f"{section_type}_save_btn_{i}",
-                    disabled=not (name and selected_address)
-                )
+            # 🔥 2️⃣ 저장된 주소 선택 모드
+            else:
 
-            if save_clicked:
-                save_address(name, selected_address)
-                st.success("저장 완료!")
-                st.rerun()
+                name = selected
+                addr = get_saved_address(name)
 
-            addr = selected_address
-
-        # ==========================
-        # 🔹 3️⃣ 저장된 주소 표시 (오른쪽)
-        # ==========================
-        else:
-            name = selected
-            saved_addr = get_saved_address(name)
-
-            with col2:
-                addr = st.text_input(
+                st.text_input(
                     "주소",
-                    value=saved_addr,
+                    value=addr,
                     disabled=True,
-                    key=f"{section_type}_saved_addr_display_{i}"
+                    key=f"{base_key}_saved_addr"
                 )
 
+        # ==========================
+        # 🔹 결과 dict 저장
+        # ==========================
         if name and addr:
             result_dict[name] = addr
 
-    return result_dict
-
-# 주소추천 공통합수 (목적지,도착지)
+    return result_dict# 주소추천 공통합수 (목적지,도착지)
 #==================================================
 
 init_db()

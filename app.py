@@ -4,8 +4,31 @@ import requests
 import pandas as pd
 import time
 import sqlite3
+import folium
+from streamlit_folium import st_folium
 
+# ==============================
+# 🔐 API KEY
+# ==============================
 
+CLIENT_ID = st.secrets["CLIENT_ID"]
+CLIENT_SECRET = st.secrets["CLIENT_SECRET"]
+
+GEOCODE_URL = "https://maps.apigw.ntruss.com/map-geocode/v2/geocode"
+DIRECTION_URL = "https://maps.apigw.ntruss.com/map-direction/v1/driving"
+
+HEADERS = {
+    "x-ncp-apigw-api-key-id": CLIENT_ID,
+    "x-ncp-apigw-api-key": CLIENT_SECRET
+}
+
+# API Key 네이버 Open API 추가
+NAVER_OPEN_CLIENT_ID = st.secrets["NAVER_OPEN_CLIENT_ID"]
+NAVER_OPEN_CLIENT_SECRET = st.secrets["NAVER_OPEN_CLIENT_SECRET"]
+
+LOCAL_SEARCH_URL = "https://openapi.naver.com/v1/search/local.json"
+
+# A이거는 헤더 추가 안해도 되나?>>>
 # ==============================
 # 📘 주소록 DB
 # ==============================
@@ -52,8 +75,11 @@ def delete_address(name):
     conn.commit()
     conn.close()
 
-#=========================
-#주소 후보리스트 반환 함수 만들기 (0303 21:00)
+init_db()
+
+# =========================
+# 네이버 로컬서치를 활용한 주소 후보리스트 반환 함수
+# =========================
 
 def search_place_candidates(query):
 
@@ -94,10 +120,10 @@ def search_place_candidates(query):
             })
 
     return results
-#===============================================
 
-#==================================================
-# 주소추천 공통합수 (목적지,도착지)
+# ====================================================================
+# 주소추천/입력 공통합수 (목적지,도착지) 렌더함수
+# ======================================================================
 
 def render_location_section(section_type, label_prefix, count, name_options):
 
@@ -209,32 +235,6 @@ def render_location_section(section_type, label_prefix, count, name_options):
             result_dict[name] = addr
 
     return result_dict# 주소추천 공통합수 (목적지,도착지)
-#==================================================
-
-init_db()
-
-# ==============================
-# 🔐 API KEY
-# ==============================
-
-CLIENT_ID = st.secrets["CLIENT_ID"]
-CLIENT_SECRET = st.secrets["CLIENT_SECRET"]
-
-GEOCODE_URL = "https://maps.apigw.ntruss.com/map-geocode/v2/geocode"
-DIRECTION_URL = "https://maps.apigw.ntruss.com/map-direction/v1/driving"
-
-HEADERS = {
-    "x-ncp-apigw-api-key-id": CLIENT_ID,
-    "x-ncp-apigw-api-key": CLIENT_SECRET
-}
-
-# API Key 네이버 Open API 추가
-NAVER_OPEN_CLIENT_ID = st.secrets["NAVER_OPEN_CLIENT_ID"]
-NAVER_OPEN_CLIENT_SECRET = st.secrets["NAVER_OPEN_CLIENT_SECRET"]
-
-LOCAL_SEARCH_URL = "https://openapi.naver.com/v1/search/local.json"
-
-# A이거는 헤더 추가 안해도 되나?>>>
 
 
 # ==============================
@@ -267,30 +267,32 @@ def get_distance(start, goal, departure_timestamp):
     params = {
         "start": start,
         "goal": goal,
-        "option": "trafast",  # 교통 반영 최단시간
+        "option": "trafast",
         "departureTime": departure_timestamp
     }
 
     res = requests.get(DIRECTION_URL, headers=HEADERS, params=params)
 
     if res.status_code != 200:
-        return None, None, None
+        return None, None, None, None
 
     try:
-        summary = res.json()['route']['trafast'][0]['summary']
+        route = res.json()['route']['trafast'][0]
+        summary = route['summary']
+        path = route['path']  # 🔥 경로 좌표 추가
 
         distance_km = round(summary['distance'] / 1000, 1)
         duration_min = round(summary['duration'] / 60000, 1)
         duration_ms = summary['duration']
 
-        return distance_km, duration_min, duration_ms
+        return distance_km, duration_min, duration_ms, path
 
     except:
-        return None, None, None
+        return None, None, None, None
 
-# ==============================
+# ===================================================================
 # 🎨 UI
-# ==============================
+# ==================================================================+
 
 st.title("🚗 거리 비교 서비스")
 
@@ -336,15 +338,27 @@ with tab1:
 
     departure_timestamp = int(departure_datetime.timestamp() * 1000)
 
+    # --------------------------------------------------
+    # 상태 변수 초기화
+    # --------------------------------------------------
+
+    if "calculated" not in st.session_state:
+        st.session_state.calculated = False
+
+    # --------------------------------------------------
+    # 🚀 버튼 = 계산 전용
+    # --------------------------------------------------
 
     if st.button("🚀 거리 계산 시작"):
 
+        all_paths = []
         result_rows = []
         summary_rows = []
 
         with st.spinner("거리 계산 중..."):
 
             for dest_name, dest_addr in destinations.items():
+
                 dest_coord = geocode(dest_addr)
 
                 if not dest_coord:
@@ -355,19 +369,26 @@ with tab1:
                 total_t = 0
                 total_duration_ms = 0
 
-
                 for origin_name, origin_addr in origins.items():
+
                     start_coord = geocode(origin_addr)
 
                     if not start_coord:
                         continue
 
-                    dist, dur, dur_ms = get_distance(
+                    dist, dur, dur_ms, path = get_distance(
                         start_coord,
                         dest_coord,
                         departure_timestamp
                     )
+
                     if dist is not None:
+                        all_paths.append({
+                            "path": path,
+                            "origin": origin_name,
+                            "destination": dest_name
+                        })
+
                         arrival_time = departure_datetime + datetime.timedelta(milliseconds=dur_ms)
 
                         result_rows.append({
@@ -380,10 +401,11 @@ with tab1:
 
                         total_d += dist
                         total_t += dur
+                        total_duration_ms += dur_ms
 
                     time.sleep(0.2)
 
-                arrival_time = departure_datetime + datetime.timedelta(milliseconds=total_duration_ms)
+                arrival_time = departure_datetime + datetime.timedelta(milliseconds=total_t)
 
                 summary_rows.append({
                     "목적지": dest_name,
@@ -392,18 +414,91 @@ with tab1:
                     "기준출발시간": arrival_time.strftime("%Y-%m-%d %H:%M")
                 })
 
+        # 🔥 여기 중요 — 계산 끝나면 저장
+        st.session_state.all_paths = all_paths
+        st.session_state.result_rows = result_rows
+        st.session_state.summary_rows = summary_rows
+        st.session_state.calculated = True
 
+
+    # =================================================
+    # 🔥 출력 전용 블록 (여기 하나만 있어야 함)
+    # =================================================
+
+    if st.session_state.get("calculated", False):
+
+        result_rows = st.session_state.result_rows
+        summary_rows = st.session_state.summary_rows
+        all_paths = st.session_state.all_paths
+
+        # ------------------------
+        # 📋 상세 결과
+        # ------------------------
         if result_rows:
             st.subheader("📋 상세 결과")
             st.dataframe(pd.DataFrame(result_rows), use_container_width=True)
 
-        total_duration_ms += dur_ms
-
+        # ------------------------
+        # 📊 요약 결과
+        # ------------------------
         if summary_rows:
             df = pd.DataFrame(summary_rows).sort_values("총 거리(km)")
             st.subheader("📊 목적지 총합 비교")
             st.dataframe(df, use_container_width=True)
             st.success(f"🏆 최적 목적지: {df.iloc[0]['목적지']}")
+
+        # -----------------------------
+        # 🗺 지도 생성
+        # -----------------------------
+
+        if all_paths:
+
+            colors = ["blue", "red", "green", "purple", "orange"]
+
+            m = folium.Map()
+
+            bounds_points = []  # 👈 이 리스트가 핵심
+
+            for idx, route_info in enumerate(all_paths):
+                raw_path = route_info["path"]
+                origin_name = route_info["origin"]
+                dest_name = route_info["destination"]
+
+                folium_path = [(p[1], p[0]) for p in raw_path]
+                color = colors[idx % len(colors)]
+
+                # 🔵 경로
+                folium.PolyLine(
+                    folium_path,
+                    weight=4,
+                    color=color,
+                    tooltip=f"{origin_name} → {dest_name}"
+                ).add_to(m)
+
+                # 🔹 출발지
+                folium.Marker(
+                    location=folium_path[0],
+                    popup=f"{origin_name}",
+                    icon=folium.Icon(color=color, icon="play")
+                ).add_to(m)
+
+                # 🔴 도착지
+                folium.Marker(
+                    location=folium_path[-1],
+                    popup=f"{dest_name}",
+                    icon=folium.Icon(color=color, icon="flag")
+                ).add_to(m)
+
+                # 👇👇👇 핵심 추가 부분
+                bounds_points.append(folium_path[0])  # 출발지
+                bounds_points.append(folium_path[-1])  # 도착지
+
+            # 🔥 자동 줌 맞춤
+            if bounds_points:
+                m.fit_bounds(bounds_points)
+
+            st_folium(m, width=800, height=500)
+
 
 # =====================================================
 # 📘 주소록 관리 탭

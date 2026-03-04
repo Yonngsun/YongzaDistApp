@@ -262,18 +262,31 @@ def geocode(address):
 # 📌 거리 계산
 # ==============================
 
-def get_distance(start, goal):
-    params = {"start": start, "goal": goal, "option": "traoptimal"}
+def get_distance(start, goal, departure_timestamp):
+
+    params = {
+        "start": start,
+        "goal": goal,
+        "option": "trafast",  # 교통 반영 최단시간
+        "departureTime": departure_timestamp
+    }
+
     res = requests.get(DIRECTION_URL, headers=HEADERS, params=params)
 
     if res.status_code != 200:
-        return None, None
+        return None, None, None
 
     try:
-        summary = res.json()['route']['traoptimal'][0]['summary']
-        return round(summary['distance']/1000,1), round(summary['duration']/60000,1)
+        summary = res.json()['route']['trafast'][0]['summary']
+
+        distance_km = round(summary['distance'] / 1000, 1)
+        duration_min = round(summary['duration'] / 60000, 1)
+        duration_ms = summary['duration']
+
+        return distance_km, duration_min, duration_ms
+
     except:
-        return None, None
+        return None, None, None
 
 # ==============================
 # 🎨 UI
@@ -312,6 +325,16 @@ with tab1:
         name_options
     )
 #================= UI입력창 종료 =================
+    import datetime
+
+    st.subheader("🕒 출발 시간 설정")
+
+    departure_datetime = st.datetime_input(
+        "출발 일시 선택",
+        value=datetime.datetime.now()
+    )
+
+    departure_timestamp = int(departure_datetime.timestamp() * 1000)
 
 
     if st.button("🚀 거리 계산 시작"):
@@ -330,6 +353,8 @@ with tab1:
 
                 total_d = 0
                 total_t = 0
+                total_duration_ms = 0
+
 
                 for origin_name, origin_addr in origins.items():
                     start_coord = geocode(origin_addr)
@@ -337,14 +362,20 @@ with tab1:
                     if not start_coord:
                         continue
 
-                    dist, dur = get_distance(start_coord, dest_coord)
-
+                    dist, dur, dur_ms = get_distance(
+                        start_coord,
+                        dest_coord,
+                        departure_timestamp
+                    )
                     if dist is not None:
+                        arrival_time = departure_datetime + datetime.timedelta(milliseconds=dur_ms)
+
                         result_rows.append({
                             "목적지": dest_name,
                             "출발지": origin_name,
                             "거리(km)": dist,
-                            "소요시간(분)": dur
+                            "소요시간(분)": dur,
+                            "도착예상시간": arrival_time.strftime("%Y-%m-%d %H:%M")
                         })
 
                         total_d += dist
@@ -352,15 +383,21 @@ with tab1:
 
                     time.sleep(0.2)
 
+                arrival_time = departure_datetime + datetime.timedelta(milliseconds=total_duration_ms)
+
                 summary_rows.append({
                     "목적지": dest_name,
-                    "총 거리(km)": round(total_d,1),
-                    "총 소요시간(분)": round(total_t,1)
+                    "총 거리(km)": round(total_d, 1),
+                    "총 소요시간(분)": round(total_t, 1),
+                    "기준출발시간": arrival_time.strftime("%Y-%m-%d %H:%M")
                 })
+
 
         if result_rows:
             st.subheader("📋 상세 결과")
             st.dataframe(pd.DataFrame(result_rows), use_container_width=True)
+
+        total_duration_ms += dur_ms
 
         if summary_rows:
             df = pd.DataFrame(summary_rows).sort_values("총 거리(km)")

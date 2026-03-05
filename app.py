@@ -304,7 +304,7 @@ tab1, tab2 = st.tabs(["🚀 거리 계산", "📘 주소록 관리"])
 
 with tab1:
     all_names = [row[0] for row in get_all_addresses()]
-    name_options = ["선택하세요"] + ["네이버검색🔍"] + all_names
+    name_options = ["네이버검색🔍"] + all_names
 
 #================= UI입력창 시작 =================
     st.header("📍 출발지 (최대 4곳)")

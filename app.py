@@ -7,6 +7,13 @@ import sqlite3
 import re
 import folium
 from streamlit_folium import st_folium
+import datetime
+from zoneinfo import ZoneInfo
+
+KST = ZoneInfo("Asia/Seoul")
+
+def now_kst():
+    return datetime.datetime.now(KST)
 
 # ==============================
 # 🔐 API KEY
@@ -402,11 +409,12 @@ with tab1:
 
     departure_datetime = st.datetime_input(
         "출발 일시 선택",
-        value=datetime.datetime.now()
+        value=now_kst()
     )
 
-    departure_timestamp = int(departure_datetime.timestamp() * 1000)
-
+    departure_timestamp = int(
+        departure_datetime.replace(tzinfo=KST).timestamp() * 1000
+    )
     # --------------------------------------------------
     # 상태 변수 초기화
     # --------------------------------------------------

@@ -77,9 +77,10 @@ def delete_address(name):
 
 init_db()
 
-# =========================
-# 네이버 로컬서치를 활용한 주소 후보리스트 반환 함수
-# =========================
+# =========================================================================
+# 네이버 로컬서치를 활용한 주소 후보리스트 반환 함수(1.local search)
+# ========================================================================
+
 
 def search_place_candidates(query):
 
@@ -89,8 +90,8 @@ def search_place_candidates(query):
     }
 
     params = {
-        "query": query,
-        "display": 10,
+        "query": query.strip(),
+        "display": 5,
         "sort": "random"
     }
 
@@ -105,21 +106,85 @@ def search_place_candidates(query):
 
     for item in data.get("items", []):
 
-        title = item["title"].replace("<b>", "").replace("</b>", "")
+        # HTML 태그 제거
+        title = re.sub('<.*?>', '', item["title"])
+
         road = item.get("roadAddress")
         jibun = item.get("address")
 
+        # 도로명 우선
         address = road if road else jibun
 
         if address:
             results.append({
                 "title": title,
+                "road": road,
+                "jibun": jibun,
                 "address": address,
-                "mapx": item.get("mapx"),
-                "mapy": item.get("mapy")
+                "mapx": float(item["mapx"]) / 10000000,
+                "mapy": float(item["mapy"]) / 10000000
             })
 
     return results
+# =========================================================================
+# 네이버 GEOCODE 활용한 주소 후보리스트 반환 함수(2.CEOCODE -> 주소검색)
+# ========================================================================
+
+def search_address_candidates(query):
+
+    params = {
+        "query": query
+    }
+
+    res = requests.get(GEOCODE_URL, headers=HEADERS, params=params)
+
+    if res.status_code != 200:
+        return []
+
+    data = res.json()
+
+    results = []
+
+    for item in data.get("addresses", []):
+
+        road = item.get("roadAddress")
+        jibun = item.get("jibunAddress")
+
+        address = road if road else jibun
+
+        if address:
+            results.append({
+                "title": address,
+                "address": address,
+                "mapx": item["x"],
+                "mapy": item["y"]
+            })
+
+    return results
+
+# =========================================================================
+# 네이버 Place_candidates + address = Location 합친 함수
+# ========================================================================
+
+def search_location_candidates(query):
+
+    # 1️⃣ Local Search 먼저
+    place_results = search_place_candidates(query)
+
+    # 결과 있으면 그대로 사용
+    if place_results:
+        return place_results
+
+    # 2️⃣ 없으면 Geocode 실행
+    #st.title("나오네")
+    address_results = search_address_candidates(query)
+
+    return address_results
+
+
+
+
+
 
 # ====================================================================
 # 주소추천/입력 공통합수 (목적지,도착지) 렌더함수
@@ -175,7 +240,7 @@ def render_location_section(section_type, label_prefix, count, name_options):
 
                 if name and len(name) >= 2:
 
-                    candidates = search_place_candidates(name)
+                    candidates = search_location_candidates(name)
 
                     if candidates:
 
@@ -500,11 +565,85 @@ with tab1:
             st_folium(m, width=800, height=500)
 
 
+
 # =====================================================
 # 📘 주소록 관리 탭
 # =====================================================
 
 with tab2:
+
+    st.header("➕ 주소 추가")
+
+    col1, col2 = st.columns([3,5])
+
+    # ----------------------------------
+    # 이름 입력
+    # ----------------------------------
+    with col1:
+        new_name = st.text_input("저장할 이름", key="new_address_name")
+
+    # ----------------------------------
+    # 주소 검색
+    # ----------------------------------
+    with col2:
+
+        search_query = st.text_input(
+            "주소 또는 장소 검색",
+            placeholder="예: 스타벅스 강남 / 테헤란로 152",
+            key="address_search_query"
+        )
+
+        selected_address = None
+
+        if search_query and len(search_query) >= 2:
+
+            candidates = search_location_candidates(search_query)
+
+            if candidates:
+
+                option_labels = [
+                    f"{item['title']} | {item['address']}"
+                    for item in candidates
+                ]
+
+                selected_label = st.selectbox(
+                    "검색 결과 선택",
+                    option_labels,
+                    key="address_candidate_select"
+                )
+
+                idx = option_labels.index(selected_label)
+                selected_item = candidates[idx]
+
+                selected_address = selected_item["address"]
+
+                st.text_input(
+                    "선택된 주소",
+                    value=selected_address,
+                    disabled=True,
+                    key="selected_address_preview"
+                )
+
+            else:
+                st.warning("검색 결과가 없습니다.")
+
+    # ----------------------------------
+    # 저장 버튼
+    # ----------------------------------
+
+    if st.button("💾 주소 저장", use_container_width=True):
+
+        if not new_name:
+            st.warning("이름을 입력하세요")
+
+        elif not selected_address:
+            st.warning("주소를 검색 후 선택하세요")
+
+        else:
+            save_address(new_name, selected_address)
+            st.success("주소 저장 완료")
+            st.rerun()
+
 
     st.header("📘 저장된 주소 목록")
 

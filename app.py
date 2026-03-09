@@ -4,6 +4,7 @@ import requests
 import pandas as pd
 import time
 import sqlite3
+import re
 import folium
 from streamlit_folium import st_folium
 
@@ -76,6 +77,7 @@ def delete_address(name):
     conn.close()
 
 init_db()
+
 
 # =========================================================================
 # 네이버 로컬서치를 활용한 주소 후보리스트 반환 함수(1.local search)
@@ -369,7 +371,9 @@ tab1, tab2 = st.tabs(["🚀 거리 계산", "📘 주소록 관리"])
 
 with tab1:
     all_names = [row[0] for row in get_all_addresses()]
-    name_options = ["선택하세요"] + ["네이버검색🔍"] + all_names
+    #name_options = ["선택하세요"] + ["네이버검색🔍"] + all_names
+    name_options = ["네이버검색🔍"] + all_names
+
 
 #================= UI입력창 시작 =================
     st.header("📍 출발지 (최대 4곳)")
@@ -383,7 +387,7 @@ with tab1:
 
     st.header("🎯 목적지")
 
-    dest_count = st.number_input("목적지 개수", 1, 10, 1)
+    dest_count = st.number_input("목적지 개수", 1, 10, 2)
 
     destinations = render_location_section(
         "destination",
@@ -571,6 +575,13 @@ with tab1:
 # =====================================================
 
 with tab2:
+    # 🔥 주소 입력 폼 초기화
+    if st.session_state.get("reset_address_form", False):
+        st.session_state["new_address_name"] = ""
+        st.session_state["address_search_query"] = ""
+        st.session_state["address_candidate_select"] = None
+        st.session_state["selected_address_preview"] = ""
+        st.session_state.reset_address_form = False
 
     st.header("➕ 주소 추가")
 
@@ -634,7 +645,7 @@ with tab2:
     if st.button("💾 주소 저장", use_container_width=True):
 
         if not new_name:
-            st.warning("이름을 입력하세요")
+            st.warning("저장할 이름을 입력하세요")
 
         elif not selected_address:
             st.warning("주소를 검색 후 선택하세요")
@@ -642,6 +653,10 @@ with tab2:
         else:
             save_address(new_name, selected_address)
             st.success("주소 저장 완료")
+
+            # 🔥 초기화 플래그
+            st.session_state.reset_address_form = True
+
             st.rerun()
 
 

@@ -242,6 +242,7 @@ def render_location_section(section_type, label_prefix, count, name_options):
 
                 name = st.text_input(
                     "검색어 입력",
+                    placeholder="예: 스타벅스 강남 / 테헤란로 152",
                     key=f"{base_key}_name"
                 )
 

@@ -1,4 +1,10 @@
 #streamlit run C:\Users\Administrator\PycharmProjects\PythonProject\app.py
+# streamlit run app.py
+# git add .
+# git commit -m "text...."
+# git push
+
+
 import streamlit as st
 import requests
 import pandas as pd
@@ -409,7 +415,7 @@ with tab1:
 #================= UI입력창 종료 =================
     import datetime
 
-    st.subheader("🕒 출발 시간 설정")
+    st.subheader("🕒 출발 일시 (예상)")
 
     departure_datetime = st.datetime_input(
         "출발 일시 선택",

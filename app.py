@@ -384,16 +384,19 @@ with tab1:
 
 
 #================= UI입력창 시작 =================
-    st.header("📍 출발지 (최대 4곳)")
+    st.header("📍 출발지(1~10)")
+
+    origin_count = st.number_input("출발지 개수", 1, 10, 4)
 
     origins = render_location_section(
         "origin",
         "출발지",
-        4,
+        #4,
+        int(origin_count),
         name_options
     )
 
-    st.header("🎯 목적지")
+    st.header("🎯 목적지(1~10)")
 
     dest_count = st.number_input("목적지 개수", 1, 10, 2)
 

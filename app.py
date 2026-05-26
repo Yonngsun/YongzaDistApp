@@ -479,8 +479,8 @@ with tab1:
                         arrival_time = departure_datetime + datetime.timedelta(milliseconds=dur_ms)
 
                         result_rows.append({
-                            "목적지": dest_name,
                             "출발지": origin_name,
+                            "목적지": dest_name,
                             "거리(km)": dist,
                             "소요시간(분)": dur,
                             "도착예상시간": arrival_time.strftime("%Y-%m-%d %H:%M")
@@ -523,7 +523,8 @@ with tab1:
         # ------------------------
         if result_rows:
             st.subheader("📋 상세 결과")
-            st.dataframe(pd.DataFrame(result_rows), use_container_width=True)
+            detail_df = pd.DataFrame(result_rows).sort_values(["출발지", "목적지"]).reset_index(drop=True)
+            st.dataframe(detail_df, use_container_width=True)
 
         # ------------------------
         # 📊 요약 결과

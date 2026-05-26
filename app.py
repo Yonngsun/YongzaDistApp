@@ -523,7 +523,8 @@ with tab1:
         # ------------------------
         if result_rows:
             st.subheader("📋 상세 결과")
-            st.dataframe(pd.DataFrame(result_rows), use_container_width=True)
+            detail_df = pd.DataFrame(result_rows).sort_values(["출발지", "목적지"]).reset_index(drop=True)
+            st.dataframe(detail_df, use_container_width=True)
 
         # ------------------------
         # 📊 요약 결과

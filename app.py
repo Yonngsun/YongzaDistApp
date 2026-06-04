@@ -21,6 +21,18 @@ KST = ZoneInfo("Asia/Seoul")
 def now_kst():
     return datetime.datetime.now(KST)
 
+def as_kst_datetime(value):
+    """Streamlit 입력값을 KST 기준 datetime으로 정규화한다."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=KST)
+    return value.astimezone(KST)
+
+def invalidate_calculation():
+    """입력값이 바뀌면 이전 조회 결과를 숨겨 stale 표시를 방지한다."""
+    if st.session_state.get("calculated", False):
+        st.session_state.result_stale = True
+    st.session_state.calculated = False
+
 # ==============================
 # 🔐 API KEY
 # ==============================
@@ -417,14 +429,15 @@ with tab1:
 
     st.subheader("🕒 출발 일시 (예상)")
 
-    departure_datetime = st.datetime_input(
+    departure_datetime_input = st.datetime_input(
         "출발 일시 선택",
-        value=now_kst()
+        value=now_kst(),
+        key="departure_datetime",
+        on_change=invalidate_calculation
     )
+    departure_datetime = as_kst_datetime(departure_datetime_input)
 
-    departure_timestamp = int(
-        departure_datetime.replace(tzinfo=KST).timestamp() * 1000
-    )
+    departure_timestamp = int(departure_datetime.timestamp() * 1000)
     # --------------------------------------------------
     # 상태 변수 초기화
     # --------------------------------------------------
@@ -492,21 +505,27 @@ with tab1:
 
                     time.sleep(0.2)
 
-                arrival_time = departure_datetime + datetime.timedelta(milliseconds=total_t)
+                summary_arrival_time = departure_datetime + datetime.timedelta(milliseconds=total_duration_ms)
 
                 summary_rows.append({
                     "목적지": dest_name,
                     "총 거리(km)": round(total_d, 1),
                     "총 소요시간(분)": round(total_t, 1),
-                    "기준출발시간": arrival_time.strftime("%Y-%m-%d %H:%M")
+                    "기준출발시간": departure_datetime.strftime("%Y-%m-%d %H:%M"),
+                    "도착예상시간": summary_arrival_time.strftime("%Y-%m-%d %H:%M")
                 })
 
         # 🔥 여기 중요 — 계산 끝나면 저장
         st.session_state.all_paths = all_paths
         st.session_state.result_rows = result_rows
         st.session_state.summary_rows = summary_rows
+        st.session_state.calculated_departure_datetime = departure_datetime
+        st.session_state.result_stale = False
         st.session_state.calculated = True
 
+
+    if st.session_state.get("result_stale", False):
+        st.info("출발 일시가 변경되었습니다. 변경된 예상 출발 시각으로 다시 조회하려면 '🚀 거리 계산 시작'을 눌러주세요.")
 
     # =================================================
     # 🔥 출력 전용 블록 (여기 하나만 있어야 함)
